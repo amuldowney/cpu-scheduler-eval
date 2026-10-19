@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>CPU Scheduler Trials</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f4f3ee;
+      --surface: #fffefa;
+      --ink: #1d2827;
+      --muted: #63706d;
+      --line: #d9ddd6;
+      --teal: #087f73;
+      --teal-soft: #d9eee9;
+      --orange: #ae4e2e;
+      --orange-soft: #f5e3d8;
+      --blue: #41688a;
+      --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --space: 8px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.45 var(--sans); }
+    header { padding: 26px clamp(18px, 4vw, 58px) 22px; background: #173d39; color: #f5f3e9; }
+    .topline { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .eyebrow { margin: 0 0 8px; color: #a8d2c7; font: 700 11px/1.2 var(--mono); letter-spacing: .13em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(25px, 4vw, 42px); line-height: 1.05; letter-spacing: -.04em; font-weight: 720; }
+    .lede { max-width: 700px; margin: 11px 0 0; color: #c8d9d3; }
+    .header-mark { font: 700 13px/1.4 var(--mono); color: #a8d2c7; text-align: right; }
+    main { max-width: 1500px; margin: 0 auto; padding: 24px clamp(16px, 3vw, 42px) 56px; }
+    .toolbar { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 15px 0 18px; border-bottom: 1px solid var(--line); }
+    .controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+    label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    select, input[type=file], button { min-height: 42px; border: 1px solid #bfc9c3; border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
+    select { min-width: 180px; padding: 0 32px 0 11px; }
+    input[type=file] { max-width: 280px; padding: 7px; font-size: 12px; }
+    button { padding: 0 14px; cursor: pointer; font-weight: 700; }
+    button.primary { border-color: #0a796e; background: var(--teal); color: white; }
+    button:hover { border-color: var(--teal); }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #74c9b6; outline-offset: 2px; }
+    .status { min-height: 24px; color: var(--muted); font: 12px/1.5 var(--mono); }
+    .status.error { color: #a32e20; }
+    .summary-strip { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 1px; margin: 20px 0; background: var(--line); border: 1px solid var(--line); }
+    .summary-item { min-height: 84px; padding: 14px 17px; background: var(--surface); }
+    .summary-label { color: var(--muted); font: 650 11px/1.3 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+    .summary-value { margin-top: 6px; font: 700 24px/1.1 var(--mono); letter-spacing: -.05em; }
+    .summary-value small { font-size: 12px; letter-spacing: 0; font-weight: 500; color: var(--muted); }
+    .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 27px 0 10px; }
+    h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+    .section-note { color: var(--muted); font-size: 12px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+    th { position: sticky; top: 0; background: #e8ece6; color: #42514e; text-align: left; font: 700 10px/1.3 var(--mono); letter-spacing: .045em; text-transform: uppercase; }
+    th, td { padding: 10px 11px; border-bottom: 1px solid #e4e7e1; }
+    tbody tr:hover { background: #f5f8f3; }
+    td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    td.policy { font-weight: 750; }
+    .role-victim { color: var(--orange); }
+    .role-borrower { color: var(--teal); }
+    .na { color: #929b96; font-style: italic; }
+    details { margin: 0; }
+    summary { color: var(--blue); cursor: pointer; font-weight: 700; }
+    .details-panel { padding: 18px; background: #f8f8f3; border-bottom: 1px solid var(--line); }
+    .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 17px; }
+    .details-grid h3 { margin: 0 0 8px; font: 700 11px var(--mono); text-transform: uppercase; color: var(--muted); }
+    .details-grid dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }
+    .details-grid dt { color: var(--muted); }
+    .details-grid dd { margin: 0; font-family: var(--mono); text-align: right; }
+    .empty { padding: 38px 20px; text-align: center; color: var(--muted); border: 1px dashed #aeb9b1; background: #fafaf6; }
+    .empty strong { display: block; color: var(--ink); margin-bottom: 5px; }
+    .bar-list { display: grid; gap: 9px; padding: 16px; border: 1px solid var(--line); background: var(--surface); }
+    .bar-row { display: grid; grid-template-columns: minmax(130px, 200px) 1fr minmax(78px, auto); align-items: center; gap: 12px; font: 12px var(--mono); }
+    .bar-label { overflow: hidden; text-overflow: ellipsis; }
+    .bar-track { height: 10px; background: #e6eae4; }
+    .bar-fill { height: 100%; min-width: 2px; background: var(--orange); }
+    .bar-value { text-align: right; color: var(--muted); }
+    footer { margin-top: 34px; padding-top: 13px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    code { font-family: var(--mono); }
+    @media (max-width: 700px) {
+      header { padding-top: 20px; }
+      .header-mark { display: none; }
+      .summary-strip { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+      .toolbar { align-items: stretch; }
+      .controls { align-items: stretch; width: 100%; }
+      .controls label { flex: 1 1 100%; }
+      select, input[type=file], button { width: 100%; max-width: none; }
+      .bar-row { grid-template-columns: 105px 1fr 70px; gap: 7px; font-size: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">Linux scheduler lab / run analysis</p>
+    <div class="topline">
+      <div>
+        <h1>CPU scheduler trials</h1>
+        <p class="lede">Compare who waits when burst capacity gets borrowed. Application tails, Go runtime delay, Linux run-queue delay, and CPU pressure stay separate.</p>
+      </div>
+      <div class="header-mark">BORROW<br>RECLAIM<br>MEASURE</div>
+    </div>
+  </header>
+  <main>
+    <section class="toolbar" aria-label="Run controls">
+      <div class="controls">
+        <button id="reload" class="primary" type="button">Refresh run directory</button>
+        <label>Load run artifacts
+          <input id="files" type="file" accept=".json,application/json" multiple>
+        </label>
+        <label>Policy
+          <select id="policy"><option value="">All policies</option></select>
+        </label>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite">Loading run artifacts…</div>
+    </section>
+
+    <section class="summary-strip" aria-label="Run summary">
+      <div class="summary-item"><div class="summary-label">Trials shown</div><div id="trial-count" class="summary-value">—</div></div>
+      <div class="summary-item"><div class="summary-label">Policies</div><div id="policy-count" class="summary-value">—</div></div>
+      <div class="summary-item"><div class="summary-label">Best victim p99.9</div><div id="best-victim" class="summary-value">—</div></div>
+      <div class="summary-item"><div class="summary-label">Data status</div><div id="data-state" class="summary-value">Waiting</div></div>
+    </section>
+
+    <section aria-labelledby="chart-heading">
+      <div class="section-heading"><h2 id="chart-heading">Victim application p99.9</h2><span class="section-note">Each bar is one trial; do not compare unlike hosts or scenarios.</span></div>
+      <div id="chart" class="bar-list"><div class="empty"><strong>No run data loaded</strong>Refresh the results directory or choose JSON artifacts.</div></div>
+    </section>
+
+    <section aria-labelledby="table-heading">
+      <div class="section-heading"><h2 id="table-heading">Trial comparison</h2><span class="section-note">Lower latency/pressure is better; higher throughput/utilization may be better.</span></div>
+      <div id="table-container"><div class="empty"><strong>Waiting for benchmark runs</strong>Run artifacts will appear here with borrower and victim results side by side.</div></div>
+    </section>
+    <footer>Latency values are nanoseconds. Runtime histogram values are bucket-midpoint estimates. Missing kernel/cgroup telemetry is marked unavailable, never treated as zero.</footer>
+  </main>
+<script>
+(() => {
+  const state = { runs: [], skipped: [] };
+  const $ = (id) => document.getElementById(id);
+  const fmt = (value, digits = 2) => Number.isFinite(Number(value)) ? Number(value).toLocaleString(undefined, {maximumFractionDigits: digits}) : '—';
+  const latency = (role, key) => role?.[key] && role[key].count > 0 ? fmt(role[key].p999_ns) : '—';
+  const ns = (value) => value === '—' ? value : `${fmt(value / 1e6, 3)} ms`;
+  const h = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function validRun(run) {
+    if (!run || run.schema_version !== 1 || !run.id || !run.policy || !run.roles || typeof run.roles !== 'object') throw new Error('Invalid run artifact: expected schema_version 1, id, policy, and roles');
+    return run;
+  }
+  function merge(runs) {
+    const byId = new Map(state.runs.map(run => [run.id, run]));
+    for (const run of runs) byId.set(run.id, validRun(run));
+    state.runs = [...byId.values()].sort((a,b) => (a.started_at || '').localeCompare(b.started_at || ''));
+    render();
+  }
+  async function refresh() {
+    $('status').classList.remove('error');
+    $('status').textContent = 'Loading run artifacts…';
+    try {
+      const response = await fetch('/api/runs', {cache: 'no-store'});
+      if (!response.ok) throw new Error(`run directory returned HTTP ${response.status}`);
+      const payload = await response.json();
+      state.skipped = payload.skipped || [];
+      merge(payload.runs || []);
+      $('status').textContent = state.runs.length ? `${state.runs.length} valid run${state.runs.length === 1 ? '' : 's'} loaded${state.skipped.length ? ` · ${state.skipped.length} skipped` : ''}` : 'No valid run artifacts found';
+    } catch (error) {
+      $('status').classList.add('error');
+      $('status').textContent = `Could not load runs: ${error.message}`;
+      if (!state.runs.length) render();
+    }
+  }
+  async function loadFiles(files) {
+    const loaded = [];
+    const errors = [];
+    for (const file of files) {
+      try { loaded.push(validRun(JSON.parse(await file.text()))); }
+      catch (error) { errors.push(`${file.name}: ${error.message}`); }
+    }
+    if (loaded.length) merge(loaded);
+    $('status').classList.toggle('error', errors.length > 0);
+    $('status').textContent = `${loaded.length} artifact${loaded.length === 1 ? '' : 's'} loaded${errors.length ? `; ${errors.length} invalid` : ''}`;
+    if (errors.length) $('status').title = errors.join('\n');
+  }
+  function roleCell(run, roleName, field) {
+    const role = run.roles?.[roleName];
+    if (!role) return '<span class="na">no role data</span>';
+    if (field === 'app') return role.application_latency?.count ? ns(role.application_latency.p999_ns) : '<span class="na">no samples</span>';
+    if (field === 'go') return role.go_scheduler_latency?.count ? ns(role.go_scheduler_latency.p999_ns) : '<span class="na">no samples</span>';
+    if (field === 'linux') return role.linux_scheduling_status?.available && role.linux_scheduling_latency?.count ? ns(role.linux_scheduling_latency.p999_ns) : `<span class="na" title="${h(role.linux_scheduling_status?.reason || 'Not measured')}">unavailable</span>`;
+    if (field === 'psi') return role.cpu_pressure_status?.available ? `${fmt(role.cpu_pressure?.some?.avg10, 3)}% / ${fmt(role.cpu_pressure?.full?.avg10, 3)}%` : `<span class="na" title="${h(role.cpu_pressure_status?.reason || 'Not measured')}">unavailable</span>`;
+    if (field === 'throughput') return fmt(role.throughput_ops_per_sec, 1);
+    if (field === 'usage') return role.cpu_stat_status?.available ? `${fmt((role.cpu_usage_usec ?? 0) / 1e6, 2)}s` : '<span class="na">unavailable</span>';
+  }
+  function renderTable(runs) {
+    if (!runs.length) {
+      $('table-container').innerHTML = `<div class="empty"><strong>${state.runs.length ? 'No trials match this filter' : 'Waiting for benchmark runs'}</strong>${state.runs.length ? 'Choose another policy or clear the filter.' : 'Refresh the run directory or select JSON artifacts.'}</div>`;
+      return;
+    }
+    const rows = runs.map(run => `<tr>
+      <td class="policy">${h(run.policy)}</td><td>${h(run.scenario || '—')}</td><td>${h(run.id)}</td>
+      <td class="role-victim num">${roleCell(run,'victim','app')}</td><td class="role-victim num">${roleCell(run,'victim','go')}</td><td class="role-victim num">${roleCell(run,'victim','linux')}</td><td class="role-victim num">${roleCell(run,'victim','psi')}</td>
+      <td class="role-borrower num">${roleCell(run,'borrower','app')}</td><td class="role-borrower num">${roleCell(run,'borrower','go')}</td><td class="role-borrower num">${roleCell(run,'borrower','linux')}</td><td class="role-borrower num">${roleCell(run,'borrower','psi')}</td>
+      <td class="num">${roleCell(run,'borrower','throughput')}</td><td class="num">${h(run.host?.cpu_model || '—')}</td>
+      <td><details><summary>Inspect</summary><div class="details-panel">${details(run)}</div></details></td>
+    </tr>`).join('');
+    $('table-container').innerHTML = `<div class="table-wrap"><table><thead><tr><th rowspan="2">Policy</th><th rowspan="2">Scenario</th><th rowspan="2">Trial</th><th colspan="4">Victim</th><th colspan="4">Borrower</th><th rowspan="2">Borrower ops/s</th><th rowspan="2">CPU</th><th rowspan="2">Metadata</th></tr><tr><th>App p99.9</th><th>Go sched p99.9</th><th>Linux wait p99.9</th><th>PSI some/full</th><th>App p99.9</th><th>Go sched p99.9</th><th>Linux wait p99.9</th><th>PSI some/full</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  function details(run) {
+    const host = run.host || {};
+    const latencyDetail = metric => metric?.count ? `${fmt(metric.mean_ns/1e6,3)} / ${fmt(metric.p90_ns/1e6,3)} / ${fmt(metric.p99_ns/1e6,3)} / ${fmt(metric.p999_ns/1e6,3)} ms (n=${fmt(metric.count,0)})` : 'unavailable';
+    const roleDetails = ['victim','borrower'].map(name => {
+      const role = run.roles?.[name] || {};
+      const pressure = role.cpu_pressure || {};
+      const offered = run.config?.[`${name}_offered_millicpu`];
+      return `<div><h3>${h(name)} detail</h3><dl><dt>Request / offered / cgroup weight</dt><dd>${fmt(role.request_millicpu,0)}m / ${Number.isFinite(Number(offered)) ? `${fmt(offered,0)}m` : '—'} / ${role.cpu_stat_status?.available ? fmt(role.cpu_weight,0) : 'unavailable'}</dd><dt>Operations / elapsed</dt><dd>${fmt(role.operations,0)} / ${fmt(role.elapsed_seconds,3)}s</dd><dt>Effective GOMAXPROCS</dt><dd>${fmt(role.effective_gomaxprocs,0)}</dd><dt>Missed releases</dt><dd>${fmt(role.missed_releases,0)}</dd><dt>App mean / p90 / p99 / p99.9</dt><dd>${latencyDetail(role.application_latency)}</dd><dt>Go wait mean / p90 / p99 / p99.9</dt><dd>${latencyDetail(role.go_scheduler_latency)}</dd><dt>Linux wait mean / p90 / p99 / p99.9</dt><dd>${role.linux_scheduling_status?.available ? latencyDetail(role.linux_scheduling_latency) : h(role.linux_scheduling_status?.reason || 'unavailable')}</dd><dt>CPU PSI some avg10/60/300</dt><dd>${role.cpu_pressure_status?.available ? `${fmt(pressure.some?.avg10,3)} / ${fmt(pressure.some?.avg60,3)} / ${fmt(pressure.some?.avg300,3)}%` : h(role.cpu_pressure_status?.reason || 'unavailable')}</dd><dt>CPU PSI full avg10/60/300</dt><dd>${role.cpu_pressure_status?.available ? `${fmt(pressure.full?.avg10,3)} / ${fmt(pressure.full?.avg60,3)} / ${fmt(pressure.full?.avg300,3)}%` : h(role.cpu_pressure_status?.reason || 'unavailable')}</dd><dt>CPU PSI some/full total Δ</dt><dd>${role.cpu_pressure_status?.available ? `${fmt(pressure.some?.total_usec/1000,2)} / ${fmt(pressure.full?.total_usec/1000,2)} ms` : 'unavailable'}</dd><dt>CPU service / throttle</dt><dd>${role.cpu_stat_status?.available ? `${fmt((role.cpu_usage_usec ?? 0)/1e6,3)}s / ${fmt((role.cpu_throttled_usec ?? 0)/1e3,2)}ms` : h(role.cpu_stat_status?.reason || 'unavailable')}</dd><dt>Go metric method</dt><dd>${h(role.go_scheduler_method || '—')}</dd></dl></div>`;
+    }).join('');
+    return `<div class="details-grid"><div><h3>Trial / host</h3><dl><dt>Started</dt><dd>${h(run.started_at || '—')}</dd><dt>Duration</dt><dd>${fmt(run.duration_seconds,2)}s</dd><dt>Kernel</dt><dd>${h(host.kernel_release || '—')}</dd><dt>Architecture</dt><dd>${h(host.architecture || '—')}</dd><dt>Logical CPUs</dt><dd>${fmt(host.logical_cpus,0)}</dd><dt>Scheduler</dt><dd>${h(run.config?.scheduler_revision || run.policy)}</dd></dl></div>${roleDetails}<div><h3>Diagnostics</h3><dl><dt>Run messages</dt><dd>${h((run.diagnostics || []).join(' · ') || 'none')}</dd></dl></div></div>`;
+  }
+  function renderChart(runs) {
+    const points = runs.map(run => ({run, metric: run.roles?.victim?.application_latency})).filter(point => point.metric?.count > 0 && Number.isFinite(point.metric.p999_ns)).map(point => ({run: point.run, value: point.metric.p999_ns}));
+    if (!points.length) {
+      $('chart').innerHTML = '<div class="empty"><strong>No victim p99.9 samples</strong>Load runs with victim application latency measurements.</div>';
+      return;
+    }
+    const max = Math.max(...points.map(point => point.value), 1);
+    $('chart').innerHTML = points.map(({run,value}) => `<div class="bar-row"><div class="bar-label" title="${h(run.id)} / ${h(run.policy)}">${h(run.policy)} · ${h(run.id)}</div><div class="bar-track" aria-label="${ns(value)}"><div class="bar-fill" style="width:${Math.max(1, value/max*100)}%"></div></div><div class="bar-value">${ns(value)}</div></div>`).join('');
+  }
+  function render() {
+    const policies = [...new Set(state.runs.map(run => run.policy))].sort();
+    const select = $('policy');
+    const selected = select.value;
+    select.innerHTML = '<option value="">All policies</option>' + policies.map(policy => `<option value="${h(policy)}">${h(policy)}</option>`).join('');
+    if (policies.includes(selected)) select.value = selected;
+    const shown = select.value ? state.runs.filter(run => run.policy === select.value) : state.runs;
+    $('trial-count').textContent = fmt(shown.length, 0);
+    $('policy-count').textContent = fmt(new Set(shown.map(run => run.policy)).size, 0);
+    $('data-state').textContent = shown.length ? (state.skipped.length ? 'Partial' : 'Ready') : 'Empty';
+    const best = shown.map(run => run.roles?.victim?.application_latency).filter(metric => metric?.count > 0 && Number.isFinite(metric.p999_ns)).map(metric => metric.p999_ns).sort((a,b) => a-b)[0];
+    $('best-victim').innerHTML = best === undefined ? '—' : `${fmt(best/1e6,3)}<small> ms</small>`;
+    renderChart(shown);
+    renderTable(shown);
+  }
+  $('reload').addEventListener('click', refresh);
+  $('files').addEventListener('change', event => loadFiles(event.target.files));
+  $('policy').addEventListener('change', render);
+  refresh();
+})();
+</script>
+</body>
+</html>

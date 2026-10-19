@@ -1,0 +1,24 @@
+# Generated binaries and local benchmark artifacts
+/bin/
+/runs/
+/runs-*/
+/results/
+/results-*/
+/artifacts/
+/profiles/
+/scratch/
+/tmp/
+/*.json
+/*.csv
+/coverage*
+*.pprof
+*.log
+*.out
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/
